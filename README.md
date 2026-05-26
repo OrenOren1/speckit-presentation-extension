@@ -23,6 +23,7 @@ When the source is an `AD.md`, it applies the **Rozanski & Woods Viewpoints & Pe
 | **Discover** | `/presentation.init` | Detect source(s) + scope + audience; scaffold `presentation/` folder; write `source.json` manifest |
 | **Spec** | `/presentation.specify` | Build the slide outline (`spec.md`) using classified references |
 | **Refine** | `/presentation.clarify` | Ask targeted questions; apply answers surgically; mark spec `ready` |
+| **Draw** *(optional)* | `/presentation.draw` | Audit diagram gaps; synthesize Mermaid diagrams per slide; author/generate AI images with model selection + ImgBB upload |
 | **Render** | `/presentation.implement` | Deterministically render Slidev `slides.md` + per-slide image prompts |
 
 The "intelligence" — scope detection, view selection, story shaping — lives in `init` + `specify`. `implement` is a dumb renderer: same spec → same output, byte-for-byte. That's what makes single-slide and single-image regeneration cheap.
@@ -217,9 +218,10 @@ npx slidev presentation/slides.md
 │   ├── init.md                # source/scope/audience detection + key setup
 │   ├── specify.md             # spec builder
 │   ├── clarify.md             # Q&A refinement
+│   ├── draw.md                # Mermaid diagram generation + image prompt authoring + interactive AI image gen
 │   └── implement.md           # Slidev renderer + image pipeline (mermaid→prompt, generate, ImgBB)
 ├── agents/
-│   └── presentation.{init,specify,clarify,implement}.agent.md
+│   └── presentation.{init,specify,clarify,draw,implement}.agent.md
 ├── scripts/
 │   └── generate_images.py     # provider chain (Gemini → OpenAI), ImgBB upload, key rotation
 ├── templates/
@@ -254,6 +256,9 @@ Then in Claude Code inside that repo:
 /presentation.init "From AD.md"
 /presentation.specify --audience arb
 /presentation.clarify
+/presentation.draw --from-ad        # optional: extract + assign diagrams from AD.md
+/presentation.draw --all            # optional: generate missing Mermaid diagrams
+/presentation.draw --generate 7     # optional: interactive AI image for slide 7
 /presentation.implement --generate
 ```
 
@@ -274,6 +279,7 @@ The view ordering matrix per scope (see `commands/specify.md` Phase 3) implement
 ## Roadmap
 
 - [x] Image pipeline: provider chain (Gemini → OpenAI), ImgBB upload, key rotation, mermaid→prompt
+- [x] `presentation.draw` — Mermaid generation, image prompt authoring (`--prompt`), interactive AI image generation (`--generate`) with model selection + in-session preview + ImgBB upload
 - [ ] Populate `references/sources/ad-md/` with condensed R&W guidance
 - [ ] Populate `references/sources/feature-branch/` with release-readout patterns
 - [ ] Populate `references/sources/session/` with summarization patterns

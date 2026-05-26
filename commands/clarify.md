@@ -1,5 +1,5 @@
 ---
-description: Refine the presentation spec through targeted clarifying questions (audience, story, view order, perspectives, image style)
+description: Refine the presentation spec through targeted clarifying questions — covers audience, story, view order, perspectives, image style, AND slide-level content alignment before any rendering happens
 handoffs:
   - label: Render Slides
     agent: presentation.implement
@@ -33,6 +33,8 @@ $ARGUMENTS
 
 Take `presentation/spec.md` from "auto-drafted proposal" to "ready to render" by asking targeted questions and applying the answers.
 
+> **Design principle**: `clarify` owns **everything that, if wrong, would cause you to redo the render**. That includes not just structure and meta (audience, order, style) but also **slide-level content** — what each slide says, what to emphasise, what to cut. Content alignment is clarify territory; rendering the locked spec is `implement`'s job.
+
 ## Outline
 
 1. Read `presentation/spec.md` and `presentation/source.json`
@@ -58,6 +60,10 @@ Scan `presentation/spec.md` for:
 | Image style undefined | `image_style: default` or absent |
 | Slides with `TBD:` bullets | Search for `TBD:` markers |
 | Perspectives unclear | Spec mentions perspective names but no slide owns it |
+| Slide content thin | Bullets are placeholders, no key message per slide |
+| Emphasis unclear | Can't tell which 1–2 points each slide must land |
+| Scope/cuts unresolved | Slide count feels off; no decision on what to cut |
+| Narrative arc loose | Transition between sections not logical or explicit |
 
 ### Phase 2 — Compose Questions
 
@@ -81,6 +87,15 @@ Standard question bank (pick the relevant ones):
    - One ADR-walkthrough slide vs. inline ADR mentions inside each view's slides?
 8. **Risks/closing**
    - Include explicit "Risks & Open Questions" slide, or fold into perspectives?
+9. **Slide-level content walk-through** *(run when slide content is thin or audience is specific)*
+   - Review the proposed slide outline section by section:
+     - What is the single message this slide must land?
+     - What evidence / data / diagram supports it?
+     - Anything to cut or merge with a neighbouring slide?
+   - Ask per-section, not per-slide, to avoid fatigue.
+10. **Emphasis and "so what"**
+    - For each major section: what should the audience *do* or *believe* after this section?
+    - If the answer is unclear, the section needs a sharper key message before rendering.
 
 ### Phase 3 — Apply Answers
 
@@ -120,6 +135,8 @@ If new gaps are introduced by the answers (e.g., "we added a regulation perspect
 - **Edit surgically** — preserve user-authored sections of the spec.
 - **Change log is mandatory** — every clarify pass appends entries.
 - **Idempotent** — re-running clarify on a `status: ready` spec should ask "anything to refine?" and exit cleanly if not.
+- **Content belongs here, not in implement** — if a slide's key message or substance is unresolved, surface it now. Discovering it mid-render wastes a full render cycle.
+- **Clarify ≠ implement** — clarify produces a refined spec; implement produces slides. Never start rendering inside clarify.
 
 ## Context
 

@@ -33,6 +33,11 @@ provides:
       description: "Render the spec into Slidev slides + per-slide image prompts. Supports --slide N, --image N, --reorder, --generate for granular iteration."
       aliases: ["presentation.implement"]
 
+    - name: "adlc.presentation.draw"
+      file: "commands/draw.md"
+      description: "Generate and refine Mermaid diagrams for presentation slides. Audit diagram gaps, synthesize new diagrams from slide content, extract and simplify diagrams from AD.md."
+      aliases: ["presentation.draw"]
+
 # Handoffs between commands (same shape as architect/)
 handoffs:
   presentation.init:
@@ -52,10 +57,20 @@ handoffs:
       send: false
 
   presentation.clarify:
+    - label: "Draw Diagrams"
+      agent: "presentation.draw"
+      prompt: "Audit and generate Mermaid diagrams for slides with diagram: TBD"
+      send: false
     - label: "Render Slides"
       agent: "presentation.implement"
       prompt: "Render Slidev slides and image prompts from the refined spec"
       send: true
+
+  presentation.draw:
+    - label: "Render Slides"
+      agent: "presentation.implement"
+      prompt: "Render slides.md from the updated spec (diagrams are now filled in)"
+      send: false
 
   presentation.implement:
     - label: "Refine Spec"

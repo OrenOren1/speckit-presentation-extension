@@ -1,5 +1,5 @@
 ---
-description: Refine the presentation spec through targeted clarifying questions (audience, story, view order, perspectives, image style)
+description: Refine the presentation spec through targeted clarifying questions — covers audience, story, view order, perspectives, image style, AND slide-level content alignment before any rendering happens
 handoffs:
   - label: Render Slides
     agent: presentation.implement
