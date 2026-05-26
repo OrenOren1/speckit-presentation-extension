@@ -64,6 +64,7 @@ Scan `presentation/spec.md` for:
 | Emphasis unclear | Can't tell which 1–2 points each slide must land |
 | Scope/cuts unresolved | Slide count feels off; no decision on what to cut |
 | Narrative arc loose | Transition between sections not logical or explicit |
+| About-me slide missing | No `s00-about-me` or `layout: intro` slide when audience is external/unfamiliar |
 
 ### Phase 2 — Compose Questions
 
@@ -96,6 +97,23 @@ Standard question bank (pick the relevant ones):
 10. **Emphasis and "so what"**
     - For each major section: what should the audience *do* or *believe* after this section?
     - If the answer is unclear, the section needs a sharper key message before rendering.
+11. **About Me slide** *(include when speaker is presenting to an unfamiliar audience or external event)*
+    - Should the deck open with a presenter intro slide?
+    - If yes, collect: name · title · company · years of experience · 3–5 specialties
+    - Placement: Slide 00 (before title) or Slide 02 (after title cover) — default is after title cover
+    - Layout: `intro` (Slidev built-in) with Tikal/company logo bottom-right
+    - Template:
+      ```markdown
+      ---
+      layout: intro
+      ---
+      # {Name}
+      {Title} · **{Company}**
+      <div class="leading-9 opacity-80 mt-2">
+        {N}+ years in {domain}<br>
+        {specialty1} · {specialty2} · {specialty3}
+      </div>
+      ```
 
 ### Phase 3 — Apply Answers
 
