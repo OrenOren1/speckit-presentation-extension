@@ -44,6 +44,18 @@ The "intelligence" — scope detection, view selection, story shaping — lives 
 
 ---
 
+## Synth — external knowledge base (optional)
+
+This extension is **self-contained** but can be enriched by [Synth](https://github.com/orensito/synth), a local FastAPI service that maintains a curated knowledge vault. When a vault is detected at `~/.synth/config/projects.json`, commands consult it as the authoritative source for R&W methodology, AD-presentation patterns, and architecture examples — the vault wins on conflict with bundled references.
+
+Both this extension and the [`architect`](https://github.com/tikalk/agentic-sdlc-spec-kit/tree/main/extensions/architect) extension delegate vault access to the **`synth` Claude Code skill** (`~/.claude/skills/synth/SKILL.md`). The skill encapsulates detection, two access modes (direct file reads or chat API), and the **taxonomy contract** that classifies each vault file as `for-ad`, `for-presentation`, or `shared`.
+
+See [`references/synth-integration.md`](references/synth-integration.md) for the full integration design.
+
+The vault's `knowledge/HOW-TO-QUERY.md` documents the schema and per-consumer recipes — the presentation extension reads `for-presentation` + `shared` (and `for-ad` when the source is AD-based).
+
+---
+
 ## Classified references
 
 References are organized by **what kind of source the deck is built from**, not as a flat list. Commands load only the relevant subset (declared in `source.json.references_to_load`).
