@@ -77,15 +77,97 @@ Missing files log a notice and fall back to inline command defaults — referenc
 `implement` supports surgical updates so you never have to regenerate the whole deck to fix one slide:
 
 ```bash
+# Content / structure
 /presentation.implement                            # full re-render from spec.md
 /presentation.implement --slide 7 "..."            # edit + re-render one slide
-/presentation.implement --image 3 "..."            # re-prompt + re-render one image
-/presentation.implement --reorder 1,2,4,3,5,6      # permute order without regenerating content
-/presentation.implement --generate                 # auto-produce images for changed prompts
+/presentation.implement --reorder 1,2,4,3,5,6      # permute order, content unchanged
+
+# Image pipeline (per slide, all routed through spec.md)
+/presentation.implement --image 3 "more abstract"  # modify prompt text only
+/presentation.implement --regenerate-prompt 7      # rebuild prompt from slide content
+/presentation.implement --mermaid-to-prompt 4      # convert slide-4 mermaid → image prompt
+/presentation.implement --generate 7               # actually call the provider for slide 7
+/presentation.implement --generate all             # generate every slide that needs it
+/presentation.implement --regenerate-image 7       # alias for --generate 7
+/presentation.implement --provider openai          # force a specific provider
+/presentation.implement --cover-from 5             # promote slide 5's image to the deck cover
 /presentation.implement --no-images                # text-only render
 ```
 
 All edits flow through `spec.md` (the source of truth), then render. Direct edits to `slides.md` are unsupported — they'll be overwritten on the next render. `slides.md.bak` is always written before a full render.
+
+---
+
+## Image pipeline
+
+The extension ships with a real image-generation pipeline (mirrors the conventions of the [`blog-post`](https://github.com/) skill so keys and file patterns are portable across both toolchains).
+
+### Capabilities
+
+| Capability | Flag | What it does |
+|---|---|---|
+| **Mermaid → prompt** | `--mermaid-to-prompt N` | Reads a slide's mermaid diagram, synthesizes an illustrated-image prompt that captures the same flow/relationships (useful when an architecture review deck wants a polished visual rather than a raw mermaid render) |
+| **Regenerate prompt** | `--regenerate-prompt N` | Rebuilds the prompt from the slide's current `title` + `key_message` + `bullets` + `image_style` |
+| **Modify prompt** | `--image N "..."` | Applies a natural-language edit to the existing prompt; surgical — doesn't touch other slides |
+| **Implement / generate** | `--generate [N\|all]` | Actually calls the provider API, saves the PNG, optionally uploads to ImgBB |
+
+### Providers — Gemini → OpenAI fallback
+
+Provider chain (first usable key wins; force with `--provider`):
+
+1. **Gemini** (Nano Banana / Nano Banana Pro) — `gemini-2.5-flash-image`, `gemini-2.5-pro-image`
+   - Multi-key rotation: on 429/401/403 the script automatically retries with the next key from `GEMINI_API_KEYS`, `.googleAI-token`, or `.gemini-api-key` (one key per line)
+2. **OpenAI DALL-E 3** — fallback when no Gemini key is usable
+
+### Storage — local by default, ImgBB if key present
+
+- **Always** writes `presentation/assets/images/slide-NN.png` locally
+- **If `IMGBB_API_KEY` is set**, also uploads to ImgBB and uses `i.ibb.co` URLs in `slides.md`
+- The original prompt is preserved as a base64-encoded HTML comment archived **inline above each image** — even if the prompt file is deleted, the prompt can be recovered:
+  ```markdown
+  <!-- image_prompt:archive index=07 b64=SXNvbWV0cmlj... -->
+  ![Deployment topology](https://i.ibb.co/abc/slide-07.png)
+  ```
+
+### API keys — user-provided
+
+`/presentation.init` checks for keys and prints setup instructions if none are found. It also auto-adds `.env` and the key files to `.gitignore`.
+
+Keys are read in this order:
+
+1. Environment variables
+2. Repo-root files (one key per line, supports rotation)
+3. `.env` file in repo root (gitignored)
+
+| Key | Required for | Where |
+|---|---|---|
+| `GEMINI_API_KEY` | Gemini image gen | env or `.env` |
+| `GEMINI_API_KEYS` | Gemini multi-key rotation | env (comma/newline-separated) |
+| `.googleAI-token` / `.gemini-api-key` | Gemini multi-key rotation | repo-root files |
+| `OPENAI_API_KEY` | OpenAI DALL-E fallback | env or `.env` |
+| `IMGBB_API_KEY` | Hosted image URLs (optional) | env or `.env` |
+| `.imgbb-token` | ImgBB single-key form | repo-root file |
+
+Copy `.env.example` to `.env` and fill in what you have. Image generation is fully optional — if no keys are present, the extension stays in prompts-only mode and you can paste the prompt files into Midjourney/DALL·E/etc. manually.
+
+### Helper script
+
+`scripts/generate_images.py` is the actual generator (callable independently for testing):
+
+```bash
+python scripts/generate_images.py --spec presentation/spec.md --slides all
+python scripts/generate_images.py --spec presentation/spec.md --slides 3,7
+python scripts/generate_images.py --spec presentation/spec.md --slides 7 \
+  --provider openai --model dall-e-3
+```
+
+Outputs a JSON report listing which slides succeeded/failed and where each image was stored (local path and ImgBB URL when applicable).
+
+Dependencies (install only when using `--generate`):
+
+```bash
+pip install google-genai openai pyyaml
+```
 
 ---
 
@@ -117,14 +199,17 @@ npx slidev presentation/slides.md
 
 ```
 .
-├── extension.yml              # speckit extension manifest
+├── extension.yml              # speckit extension manifest (incl. image pipeline config)
+├── .env.example               # template — copy to .env (gitignored)
 ├── commands/
-│   ├── init.md                # source/scope/audience detection
+│   ├── init.md                # source/scope/audience detection + key setup
 │   ├── specify.md             # spec builder
 │   ├── clarify.md             # Q&A refinement
-│   └── implement.md           # Slidev renderer
+│   └── implement.md           # Slidev renderer + image pipeline (mermaid→prompt, generate, ImgBB)
 ├── agents/
 │   └── presentation.{init,specify,clarify,implement}.agent.md
+├── scripts/
+│   └── generate_images.py     # provider chain (Gemini → OpenAI), ImgBB upload, key rotation
 ├── templates/
 │   ├── presentation-spec-template.md
 │   └── slidev-template.md
@@ -176,12 +261,16 @@ The view ordering matrix per scope (see `commands/specify.md` Phase 3) implement
 
 ## Roadmap
 
+- [x] Image pipeline: provider chain (Gemini → OpenAI), ImgBB upload, key rotation, mermaid→prompt
 - [ ] Populate `references/sources/ad-md/` with condensed R&W guidance
 - [ ] Populate `references/sources/feature-branch/` with release-readout patterns
 - [ ] Populate `references/sources/session/` with summarization patterns
 - [ ] Populate `references/scopes/` and `references/audiences/`
 - [ ] `references/output/slidev-cheatsheet.md`
 - [ ] Bash setup script (`scripts/bash/setup-presentation.sh`) for path resolution + flag parsing, matching `architect/`'s pattern
+- [ ] Smoke-test image generation end-to-end (Gemini path)
+- [ ] Smoke-test image generation end-to-end (OpenAI path)
+- [ ] Smoke-test ImgBB upload + archive-comment placement in `slides.md`
 - [ ] Smoke-test on a real AD-based deck
 - [ ] Smoke-test on a `branches` source
 - [ ] Smoke-test on a `session` source

@@ -94,6 +94,43 @@ defaults:
   images:
     mode: "prompts-only"  # prompts-only | auto-generate | hybrid
     style_default: "clean, modern, technical illustration, isometric, soft palette"
+    # Provider chain — tried in order; first one with a usable key wins.
+    # Mirrors blog-post skill: Gemini preferred, OpenAI DALL-E 3 fallback.
+    providers:
+      - id: "gemini"
+        models: ["gemini-2.5-flash-image", "gemini-2.5-pro-image"]   # Nano Banana / Nano Banana Pro
+        api_key_env: ["GEMINI_API_KEY", "GEMINI_API_KEYS"]
+        api_key_files: [".googleAI-token", ".gemini-api-key"]        # one key per line; rotate on 429/401/403
+      - id: "openai"
+        models: ["dall-e-3"]
+        api_key_env: ["OPENAI_API_KEY"]
+    # Storage: local-by-default + ImgBB when key present.
+    storage:
+      local:
+        enabled: true
+        path: "presentation/assets/images/"          # slide-NN.png
+      imgbb:
+        enabled_if_key: true                         # auto-on when IMGBB_API_KEY exists
+        api_key_env: ["IMGBB_API_KEY"]
+        api_key_files: [".imgbb-token"]
+      slides_url_preference: "remote_if_available"   # remote_if_available | local_always
+    # Mermaid → image-prompt: when a slide has a mermaid block AND user requests
+    # `--mermaid-to-prompt N`, /implement synthesizes a prompt that depicts the
+    # same flow/relationships as an illustrated visual (not raw mermaid).
+    mermaid_to_prompt:
+      enabled: true
+      style_hint: "isometric architecture illustration, clean palette, minimal text"
+    # Marker convention — same as blog-post for portability across the toolchain.
+    markers:
+      inline: "[IMAGE_PROMPT: {prompt}]"             # single line, single closing `]`
+      archive: "<!-- image_prompt:archive index={n} b64={b64url} -->"
+      cover_open: "<!-- blog:image role=\"cover\" id=\"{slug}\" -->"
+      cover_close: "<!-- /blog:image -->"
+  env:
+    # Keys are read from environment first, then from `.env` in repo root (gitignored).
+    # See `.env.example` for the full list.
+    dotenv_path: ".env"
+    auto_gitignore: true                              # /presentation.init appends `.env` to .gitignore if missing
   scope_detection:
     enabled: true         # auto-detect devops/platform/product/etc. scope
   synth_enrichment:

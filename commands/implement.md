@@ -27,13 +27,23 @@ $ARGUMENTS
 
 ### Flags
 
+**Content / structure:**
 - `--slide N "<edit instruction>"` — re-render slide N only; updates spec entry + slides.md block
-- `--image N "<edit instruction>"` — re-prompt image for slide N; rewrites the prompt file (and image if `--generate`)
 - `--reorder N1,N2,...` — apply new slide order; updates spec + slides.md without regenerating content
-- `--generate` — call the configured image-gen skill/MCP for any slide whose prompt is new or changed
 - `--no-images` — skip image prompts entirely on this render
 - `--theme NAME` — override Slidev theme (default from `extension.yml`)
 - `--dry-run` — print what would change without writing files
+
+**Image pipeline (per-slide granular controls):**
+- `--image N "<edit instruction>"` — modify the prompt text for slide N (writes spec; does NOT call image gen)
+- `--regenerate-prompt N` — re-synthesize the prompt for slide N from its current content (title + key_message + bullets + diagram)
+- `--mermaid-to-prompt N` — read the mermaid block on slide N and convert it to a natural-language image prompt (illustrated visual that captures the same flow/relationships)
+- `--generate [N|all]` — actually call the image generator. Provider chain: Gemini → OpenAI. Uploads to ImgBB if `IMGBB_API_KEY` is set.
+- `--regenerate-image N` — alias for `--generate N`; useful after `--image` or `--regenerate-prompt`
+- `--provider gemini|openai` — force a specific provider (overrides chain)
+- `--model NAME` — force a specific model
+- `--style "..."` — override `image_style` for this render
+- `--cover-from N` — promote slide N's image to be the deck cover
 
 ## Goal
 
@@ -170,15 +180,118 @@ For each image-bearing slide, write `presentation/prompts/slide-NN.prompt.md`:
 
 This is what the user copy-pastes into Midjourney/DALL·E/etc. when running in prompts-only mode.
 
-### Phase 5 — Optional Auto-Generation (`--generate`)
+### Phase 4.1 — Prompt Synthesis & Modification
 
-If `--generate` is set AND an image-gen capability is available (skill or MCP), call it per changed prompt:
+Three ways a prompt can be (re)created — all of them write to `spec.md` first, then re-emit `prompts/slide-NN.prompt.md`:
 
-- Input: the rendered `slide-NN.prompt.md`
-- Output: `presentation/assets/images/slide-NN.png`
-- On failure: leave the prompt file in place, surface the error, do not block the render
+**1. `--image N "<edit instruction>"`** — *modify*
+- Apply the natural-language edit to slide N's existing `image_prompt` field (e.g. "more abstract, drop the cloud icon")
+- Surgical: don't touch other slides
 
-If no image-gen capability is available, print a one-line notice and continue without images.
+**2. `--regenerate-prompt N`** — *regenerate from slide content*
+- Recompose `image_prompt` from the current slide fields: `title`, `key_message`, `bullets`, `view`, plus `image_style`
+- Useful after the slide's content changed via `--slide N` and you want the visual to match
+- Template:
+  > `<image_style>. Depicting <key_message>. Visual elements suggest: <bullets[0..2] reframed as objects/scenes>. <16:9, no text labels.>`
+
+**3. `--mermaid-to-prompt N`** — *mermaid → illustrated prompt* (NEW capability)
+
+When a slide owns a mermaid block (because `diagram:` in the spec points to a `mermaid` fence in `AD.md` or an inline diagram), this flag converts the diagram **semantics** to a natural-language image prompt — useful when an architecture review deck wants a polished illustration rather than a raw mermaid render.
+
+Process:
+1. Locate the mermaid block referenced by slide N's `diagram:` field
+2. Parse the diagram type (`graph LR`, `sequenceDiagram`, `flowchart TD`, `C4Context`, etc.)
+3. Extract nodes (with labels) and edges (with labels)
+4. Synthesize a prompt using this skeleton:
+
+   ```
+   {style_hint from extension.yml mermaid_to_prompt}.
+   Depicting {N} components: {node_labels}.
+   Their relationships: {edge_descriptions written as natural language flow}.
+   Layout: {match diagram orientation — LR → left-to-right, TD → top-down}.
+   16:9, minimal text labels, focus on visual hierarchy.
+   ```
+
+5. Write the synthesized prompt to slide N's `image_prompt`; preserve the original mermaid (don't delete — it's still useful as a fallback)
+
+**Diagram type → prompt hint** quick reference:
+
+| Mermaid type | Visual treatment |
+|---|---|
+| `graph LR` / `flowchart LR` | Horizontal flow, left-to-right arrows, pipeline aesthetic |
+| `graph TD` / `flowchart TD` | Top-down hierarchy, tree or layered cake |
+| `sequenceDiagram` | Time-ordered interaction; choreography or relay-race metaphor |
+| `C4Context` / `C4Container` | Layered system map; concentric or layered cake |
+| `stateDiagram-v2` | State machine; circuits, gears, or transformation chain |
+| `erDiagram` | Data model; connected entities, blueprint style |
+
+### Phase 5 — Image Generation (`--generate`)
+
+Generates actual images by calling provider APIs. This is the **only** phase that hits external services.
+
+#### 5.1 Key resolution
+
+Resolved in this order; first hit wins:
+
+1. Environment variables: `GEMINI_API_KEY` → `GEMINI_API_KEYS` (comma- or newline-separated) → `OPENAI_API_KEY`
+2. Repo-root files: `.googleAI-token`, `.gemini-api-key` (one key per line, rotate on 429/401/403)
+3. `.env` file in repo root (loaded if present; **never committed** — `.env` is auto-added to `.gitignore` by `/presentation.init`)
+
+If no provider key is found, abort the generation step with a clear message and continue rendering without images.
+
+#### 5.2 Provider chain
+
+```
+1. Try Gemini (Nano Banana / Nano Banana Pro):
+     - model: gemini-2.5-flash-image (default)
+     - on quota/auth errors (429/401/403), rotate to next key in GEMINI_API_KEYS
+     - on persistent failure, fall through to OpenAI
+2. Try OpenAI DALL-E 3:
+     - model: dall-e-3
+     - 1024x1024 (square) or 1792x1024 (16:9)
+3. If both fail: surface error, leave previous image (if any) in place, mark prompt file with a `# generation_failed:` note
+```
+
+Force a specific provider with `--provider gemini|openai` and a specific model with `--model NAME`.
+
+#### 5.3 Generation per slide
+
+For each slide N being generated:
+
+1. Read prompt from `prompts/slide-NN.prompt.md` (or spec field if file missing)
+2. Call provider; receive image bytes
+3. Save locally: `presentation/assets/images/slide-NN.png`
+4. **If `IMGBB_API_KEY` is set (env or `.imgbb-token` file)**:
+   - Upload to ImgBB; receive `i.ibb.co` URL
+   - In `slides.md`, replace the image reference with the remote URL
+   - **Archive the original prompt** as a one-line HTML comment immediately above the image, matching the blog-post convention:
+     ```markdown
+     <!-- image_prompt:archive index=07 b64=<base64url> -->
+     ![Deployment topology illustration](https://i.ibb.co/.../slide-07.png)
+     ```
+   - This way the prompt is never lost even if the prompt file is later deleted
+5. If `IMGBB_API_KEY` is absent: keep local relative paths in `slides.md` (`./assets/images/slide-NN.png`); still write the archive comment so the prompt is preserved
+
+#### 5.4 Helper script
+
+The actual provider calls and ImgBB upload live in `scripts/generate_images.py`. The command invokes it as:
+
+```bash
+python .specify/extensions/presentation/scripts/generate_images.py \
+  --spec presentation/spec.md \
+  --slides {N|all} \
+  [--provider gemini|openai] [--model NAME]
+```
+
+The script reads the same `extension.yml` defaults and produces a JSON report on stdout listing which slides succeeded/failed and where images were stored.
+
+### Phase 5.5 — Cover Handling (`--cover-from N`)
+
+If the user wants slide N's image to also serve as the deck cover:
+
+1. Copy the slide-N image to `assets/images/cover.png` (and upload to ImgBB if enabled)
+2. Update spec frontmatter: `image: <cover URL or path>`
+3. Re-render slide 01 (the title slide) to reference the cover
 
 ### Phase 6 — Diff Summary
 

@@ -177,6 +177,40 @@ presentation/
 
 Abort with a clear error if the directory exists and `--force` is not set.
 
+### Phase 5.5 — API Key Setup (image generation)
+
+The extension can run prompts-only without any keys, but if the user wants `--generate` to actually produce images they need at least one LLM provider key and (optionally) ImgBB for hosting.
+
+1. **Check** for any of these keys (in this order):
+   - Env: `GEMINI_API_KEY`, `GEMINI_API_KEYS`, `OPENAI_API_KEY`, `IMGBB_API_KEY`
+   - Files at repo root: `.googleAI-token`, `.gemini-api-key`, `.imgbb-token`
+   - `.env` file at repo root
+
+2. **If no keys found** AND user did not pass `--no-images`:
+   - Copy `.env.example` (from the extension) to repo-root `.env` if it doesn't exist
+   - Print a short notice:
+     ```
+     No image-generation keys found. Image generation will be skipped.
+     To enable, add at least one of:
+       - GEMINI_API_KEY (or GEMINI_API_KEYS, multi-key rotation)
+       - OPENAI_API_KEY
+     Optional for hosted URLs: IMGBB_API_KEY
+     Edit `.env` (gitignored) or export as environment variables.
+     ```
+   - **Do not block** — the rest of init proceeds normally; generation simply runs in prompts-only mode
+
+3. **Ensure `.env` is gitignored**: if a `.gitignore` exists at repo root, append `.env` to it when missing. If no `.gitignore` exists, create one with `.env`. Same for `.googleAI-token`, `.gemini-api-key`, `.imgbb-token`.
+
+4. **Record** key availability into `source.json.image_pipeline`:
+   ```json
+   "image_pipeline": {
+     "providers_available": ["gemini"],
+     "storage_remote": false,
+     "mode_default": "prompts-only"
+   }
+   ```
+   Downstream `/presentation.implement --generate` reads this to decide what to attempt.
+
 ### Phase 6 — Write `source.json`
 
 ```json
