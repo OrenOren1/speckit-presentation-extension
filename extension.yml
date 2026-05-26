@@ -1,0 +1,101 @@
+schema_version: "1.0"
+
+extension:
+  id: "presentation"
+  name: "Presentation - AD-to-Slides Generator"
+  version: "0.1.0"
+  description: "Generate, refine, and iterate on Slidev presentations from an Architecture Description (AD.md) or a free-form topic. Follows the architect extension's init → specify → clarify → implement methodology."
+  author: "Agentic SDLC Team"
+  license: "MIT"
+
+requires:
+  speckit_version: ">=0.0.80"
+
+provides:
+  commands:
+    - name: "adlc.presentation.init"
+      file: "commands/init.md"
+      description: "Detect source (AD.md or free-form topic), detect scope (DevOps/platform/product/etc.), scaffold presentation/ folder"
+      aliases: ["presentation.init"]
+
+    - name: "adlc.presentation.specify"
+      file: "commands/specify.md"
+      description: "Build the presentation spec: story, audience, view ordering, slide outline. Sources guidance from references/ (and optionally a Synth vault if present)."
+      aliases: ["presentation.specify"]
+
+    - name: "adlc.presentation.clarify"
+      file: "commands/clarify.md"
+      description: "Refine the presentation spec through targeted clarifying questions (audience, story, view order, perspectives, image style)"
+      aliases: ["presentation.clarify"]
+
+    - name: "adlc.presentation.implement"
+      file: "commands/implement.md"
+      description: "Render the spec into Slidev slides + per-slide image prompts. Supports --slide N, --image N, --reorder, --generate for granular iteration."
+      aliases: ["presentation.implement"]
+
+# Handoffs between commands (same shape as architect/)
+handoffs:
+  presentation.init:
+    - label: "Build Presentation Spec"
+      agent: "presentation.specify"
+      prompt: "Build the presentation spec from the scaffolded source and detected scope"
+      send: true
+
+  presentation.specify:
+    - label: "Refine Spec"
+      agent: "presentation.clarify"
+      prompt: "Refine the presentation spec through clarifying questions"
+      send: true
+    - label: "Render Slides"
+      agent: "presentation.implement"
+      prompt: "Render Slidev slides and image prompts from the spec"
+      send: false
+
+  presentation.clarify:
+    - label: "Render Slides"
+      agent: "presentation.implement"
+      prompt: "Render Slidev slides and image prompts from the refined spec"
+      send: true
+
+  presentation.implement:
+    - label: "Refine Spec"
+      agent: "presentation.clarify"
+      prompt: "Adjust the spec and re-render"
+      send: false
+
+tags:
+  - "presentation"
+  - "slidev"
+  - "architecture"
+  - "rozanski-woods"
+  - "documentation"
+
+defaults:
+  source:
+    prefer: "auto"        # ad | repo | branches | session | topic | hybrid | auto
+    ad_location: "AD.md"
+    auto_detect_priority:
+      - ad                # AD.md if present
+      - repo              # else: scan codebase
+      - topic             # else: prompt user
+    branches:
+      base_default: "main"   # falls back to detected default branch (main/master/develop)
+    session:
+      transcript_glob: "~/.claude/projects/*/*.jsonl"
+  output:
+    location: "presentation/"
+    spec_file: "spec.md"
+    slides_file: "slides.md"
+    images_dir: "assets/images/"
+    prompts_dir: "prompts/"
+  slidev:
+    theme: "default"
+    transition: "slide-left"
+  images:
+    mode: "prompts-only"  # prompts-only | auto-generate | hybrid
+    style_default: "clean, modern, technical illustration, isometric, soft palette"
+  scope_detection:
+    enabled: true         # auto-detect devops/platform/product/etc. scope
+  synth_enrichment:
+    enabled: true         # if a Synth vault is detected, read knowledge/guides/rw-*.md for richer guidance
+    config_path: "~/.synth/config/projects.json"
